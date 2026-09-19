@@ -31,7 +31,16 @@ jobs:
           gh issue create \
             --title "DEBUG prisma:generate falló (run ${{ github.run_id }})" \
             --body-file /tmp/prisma-generate.log
-      - run: npm run typecheck
+      - name: typecheck (debug temporal)
+        run: npm run typecheck 2>&1 | tee /tmp/typecheck.log
+      - name: DEBUG TEMPORAL -- reportar error de typecheck en un issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create \
+            --title "DEBUG typecheck falló (run ${{ github.run_id }})" \
+            --body-file /tmp/typecheck.log
       - run: npm run lint
       - run: npm run format:check
       - run: npm test
