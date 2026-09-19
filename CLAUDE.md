@@ -102,3 +102,22 @@ archivo.json ...` y despues `node -e "const d=require('archivo.json'); ..."`
 Si una sesión futura ve el mismo 403 al pegarle a `api.github.com`
 desde el contenedor cloud, no vale la pena reinstalar `gh` ni
 reintentar ahí — ir directo a este flujo con `device_bash`.
+
+## `binaries.prisma.sh` flaquea de forma intermitente en Actions
+
+Descubierto el 2026-09-19 (PR #17): a diferencia de estar bloqueado
+por completo (como en el contenedor cloud y la compu de Rocco — ver
+arriba), en los runners de GitHub Actions `binaries.prisma.sh` SÍ
+responde, pero de forma intermitente — el mismo commit, sin ningún
+cambio, pasó `prisma:generate` en un intento y falló en el siguiente
+(a veces con 403 en el checksum, a veces generando un cliente
+incompleto que hace fallar `typecheck` después). No es un problema
+del schema ni del código.
+
+Mitigación: los tres workflows que corren `prisma generate`
+(`ci.yml`, `db-migrate.yml`, `e2e-smoke.yml`) reintentan ese paso
+hasta 3 veces con una pausa de 15s antes de fallar el job. Si un PR
+falla igual después de eso, no asumir que el schema está mal —
+revisar el log del paso primero (o, si hace falta, agregar
+temporalmente un paso `if: failure()` que abra un issue con el log,
+como en `db-migrate.yml`/`e2e-smoke.yml`) antes de tocar el schema.

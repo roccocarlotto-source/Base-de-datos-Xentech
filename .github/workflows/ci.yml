@@ -17,7 +17,17 @@ jobs:
           cache: "npm"
 
       - run: npm ci
-      - run: npm run prisma:generate
+      # binaries.prisma.sh (descarga del motor de Prisma) flaquea de forma
+      # intermitente desde los runners de GitHub Actions -- reintenta antes
+      # de fallar el job entero por un problema de red externo, no de código.
+      - name: prisma generate (con reintentos)
+        run: |
+          for intento in 1 2 3; do
+            npm run prisma:generate && exit 0
+            echo "prisma:generate falló (intento $intento/3), reintentando en 15s..."
+            sleep 15
+          done
+          exit 1
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run format:check
