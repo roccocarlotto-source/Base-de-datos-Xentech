@@ -75,6 +75,7 @@ bloqueado, así que instalarlo no sirve.
 Workaround que funciona: la compu de Rocco (linked device, herramientas
 `device_bash`/`device_stage_files`/`device_commit_files`) sí tiene
 salida normal a `api.github.com`. Flujo:
+
 1. Codear y commitear en el contenedor cloud, como siempre.
 2. `git bundle create` de la rama → `SendUserFile` → `device_commit_files`
    a `Proyectos/` en la compu de Rocco (el clone que vive ahí,
@@ -83,7 +84,7 @@ salida normal a `api.github.com`. Flujo:
    después `git push origin <rama>`.
 4. PRs, estado de CI y merge: `curl` con el PAT contra `api.github.com`
    desde `device_bash` (no `gh`, no está instalado ahí) — `curl -o
-   archivo.json ...` y despues `node -e "const d=require('archivo.json'); ..."`
+archivo.json ...` y despues `node -e "const d=require('archivo.json'); ..."`
    para parsear la respuesta, más simple que pelearse con JSON en bash.
 
 Si una sesión futura ve el mismo 403 al pegarle a `api.github.com`
