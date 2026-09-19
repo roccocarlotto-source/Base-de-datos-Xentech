@@ -103,31 +103,32 @@ Si una sesión futura ve el mismo 403 al pegarle a `api.github.com`
 desde el contenedor cloud, no vale la pena reinstalar `gh` ni
 reintentar ahí — ir directo a este flujo con `device_bash`.
 
-## `binaries.prisma.sh` flaquea de forma intermitente en Actions
+## Si `prisma:generate`/`typecheck` falla en Actions: leer el log primero
 
-Descubierto el 2026-09-19 (PR #17): a diferencia de estar bloqueado
-por completo (como en el contenedor cloud y la compu de Rocco — ver
-arriba), en los runners de GitHub Actions `binaries.prisma.sh` SÍ
-responde, pero de forma intermitente — el mismo commit, sin ningún
-cambio, pasó en un intento y falló en el siguiente. Dos formas
-distintas de fallar, confirmadas ambas en la práctica: (a)
-`prisma:generate` falla directo (403 en el checksum del motor), o
-(b) `prisma:generate` "pasa" pero deja un cliente incompleto/corrupto
-que recién rompe `npm run typecheck` un paso después. No es un
-problema del schema ni del código — se confirmó reproduciendo el
-mismo commit varias veces seguidas contra CI real.
+Aprendido el 2026-09-19 (PR #17), de la forma difícil: varios reruns
+seguidos del MISMO commit dieron resultados distintos (pasó una vez,
+falló varias otras, a veces en `prisma:generate`, a veces recién en
+`typecheck`), lo que llevó a asumir que era `binaries.prisma.sh`
+(descarga del motor de Prisma) flaqueando de forma intermitente en
+los runners de Actions — un problema ya conocido de red, no de
+código. Esa fue una conclusión prematura: cuando finalmente se
+capturó el log completo (agregando temporalmente un paso `if:
+failure()` que abre un issue con el output, como ya hacen
+`db-migrate.yml`/`e2e-smoke.yml`), el error real era `P1012`, un
+schema inválido — `Conversation.organization` sin el campo de
+relación opuesto en `Organization` (`prisma validate`/`generate` lo
+exige siempre, de forma determinística, no es un chequeo de red).
+Los reintentos "pasando" antes probablemente fueron por otra causa
+(cache de npm, engine parcialmente cacheado) que enmascaró el error
+real la mayoría de las veces.
 
-Mitigación en `ci.yml`: un solo paso reintenta hasta 3 veces el combo
-`rm -rf node_modules/.prisma && prisma generate && typecheck` (no
-solo `prisma generate` solo) — importante regenerar el cliente en
-cada vuelta, porque reintentar únicamente `typecheck` sobre un
-cliente ya corrupto no soluciona nada. `db-migrate.yml` y
-`e2e-smoke.yml` reintentan `prisma generate` solo (no hacen
-typecheck), con el mismo mecanismo simple de 3 intentos + 15s de
-pausa.
-
-Si un PR falla igual después de eso, no asumir que el schema está
-mal — revisar el log del paso primero (agregar temporalmente un paso
-`if: failure()` que abra un issue con el log, como ya hacen
-`db-migrate.yml`/`e2e-smoke.yml`, y devolverlo a su estado normal
-después) antes de tocar el schema.
+**Moraleja: ante un fallo de `prisma:generate`/`typecheck` en CI, leer
+el log del paso ANTES de asumir flakiness de red y agregar
+reintentos.** `ci.yml` igual quedó con un reintento (3 intentos,
+regenerando el cliente entero en cada vuelta — `rm -rf
+node_modules/.prisma && prisma generate && typecheck` — no solo
+`prisma generate` solo, porque un cliente corrupto no se arregla
+reintentando solo el typecheck) por si la flakiness de red real
+aparece en el futuro, y `db-migrate.yml`/`e2e-smoke.yml` reintentan
+`prisma generate` con el mismo mecanismo simple. Pero el primer paso
+siempre es mirar el error real, no reintentar a ciegas.

@@ -48,6 +48,7 @@ model Organization {
   agentToggles         OrganizationAgentToggle[]
   agentConfigs         AgentConfig[]
   whatsappConnection   WhatsAppConnection?
+  conversations        Conversation[]
   knowledgeBaseEntries KnowledgeBaseEntry[]
 
   @@map("organizations")

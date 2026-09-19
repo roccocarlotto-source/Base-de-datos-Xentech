@@ -5,10 +5,6 @@ on:
   push:
     branches: [main]
 
-permissions:
-  contents: read
-  issues: write
-
 jobs:
   backend:
     runs-on: ubuntu-latest
@@ -22,37 +18,20 @@ jobs:
 
       - run: npm ci
       # binaries.prisma.sh (descarga del motor de Prisma) flaquea de forma
-      # intermitente desde los runners de Actions: a veces prisma:generate
-      # falla directo, a veces "pasa" pero deja un cliente incompleto que
-      # recién rompe typecheck después. Por eso el reintento regenera el
-      # cliente entero en cada vuelta (no solo reintenta typecheck con un
-      # cliente ya corrupto) -- ver CLAUDE.md para el detalle de cómo se
-      # confirmó esto en la práctica (PR #17).
+      # intermitente desde los runners de Actions -- reintenta antes de
+      # fallar el job por un problema de red externo, no de código. Ver
+      # CLAUDE.md.
       - name: prisma generate + typecheck (con reintentos)
         run: |
           for intento in 1 2 3; do
             rm -rf node_modules/.prisma
-            echo "=== intento $intento: prisma generate ===" >> /tmp/debug.log
-            npm run prisma:generate >> /tmp/debug.log 2>&1
-            gen_status=$?
-            echo "=== intento $intento: typecheck (generate exit=$gen_status) ===" >> /tmp/debug.log
-            npm run typecheck >> /tmp/debug.log 2>&1
-            tc_status=$?
-            echo "=== intento $intento: typecheck exit=$tc_status ===" >> /tmp/debug.log
-            if [ "$gen_status" -eq 0 ] && [ "$tc_status" -eq 0 ]; then
+            if npm run prisma:generate && npm run typecheck; then
               exit 0
             fi
+            echo "prisma:generate/typecheck falló (intento $intento/3), reintentando en 15s..."
             sleep 15
           done
           exit 1
-      - name: DEBUG TEMPORAL -- reportar TODOS los intentos en un issue
-        if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh issue create \
-            --title "DEBUG los 3 intentos fallaron (run ${{ github.run_id }})" \
-            --body-file /tmp/debug.log
       - run: npm run lint
       - run: npm run format:check
       - run: npm test
