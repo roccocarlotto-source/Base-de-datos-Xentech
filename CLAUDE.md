@@ -109,15 +109,25 @@ Descubierto el 2026-09-19 (PR #17): a diferencia de estar bloqueado
 por completo (como en el contenedor cloud y la compu de Rocco — ver
 arriba), en los runners de GitHub Actions `binaries.prisma.sh` SÍ
 responde, pero de forma intermitente — el mismo commit, sin ningún
-cambio, pasó `prisma:generate` en un intento y falló en el siguiente
-(a veces con 403 en el checksum, a veces generando un cliente
-incompleto que hace fallar `typecheck` después). No es un problema
-del schema ni del código.
+cambio, pasó en un intento y falló en el siguiente. Dos formas
+distintas de fallar, confirmadas ambas en la práctica: (a)
+`prisma:generate` falla directo (403 en el checksum del motor), o
+(b) `prisma:generate` "pasa" pero deja un cliente incompleto/corrupto
+que recién rompe `npm run typecheck` un paso después. No es un
+problema del schema ni del código — se confirmó reproduciendo el
+mismo commit varias veces seguidas contra CI real.
 
-Mitigación: los tres workflows que corren `prisma generate`
-(`ci.yml`, `db-migrate.yml`, `e2e-smoke.yml`) reintentan ese paso
-hasta 3 veces con una pausa de 15s antes de fallar el job. Si un PR
-falla igual después de eso, no asumir que el schema está mal —
-revisar el log del paso primero (o, si hace falta, agregar
-temporalmente un paso `if: failure()` que abra un issue con el log,
-como en `db-migrate.yml`/`e2e-smoke.yml`) antes de tocar el schema.
+Mitigación en `ci.yml`: un solo paso reintenta hasta 3 veces el combo
+`rm -rf node_modules/.prisma && prisma generate && typecheck` (no
+solo `prisma generate` solo) — importante regenerar el cliente en
+cada vuelta, porque reintentar únicamente `typecheck` sobre un
+cliente ya corrupto no soluciona nada. `db-migrate.yml` y
+`e2e-smoke.yml` reintentan `prisma generate` solo (no hacen
+typecheck), con el mismo mecanismo simple de 3 intentos + 15s de
+pausa.
+
+Si un PR falla igual después de eso, no asumir que el schema está
+mal — revisar el log del paso primero (agregar temporalmente un paso
+`if: failure()` que abra un issue con el log, como ya hacen
+`db-migrate.yml`/`e2e-smoke.yml`, y devolverlo a su estado normal
+después) antes de tocar el schema.

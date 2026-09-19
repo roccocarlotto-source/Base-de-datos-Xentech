@@ -5,10 +5,6 @@ on:
   push:
     branches: [main]
 
-permissions:
-  contents: read
-  issues: write
-
 jobs:
   backend:
     runs-on: ubuntu-latest
@@ -22,34 +18,23 @@ jobs:
 
       - run: npm ci
       # binaries.prisma.sh (descarga del motor de Prisma) flaquea de forma
-      # intermitente desde los runners de GitHub Actions -- reintenta antes
-      # de fallar el job entero por un problema de red externo, no de código.
-      - name: prisma generate (con reintentos)
+      # intermitente desde los runners de Actions: a veces prisma:generate
+      # falla directo, a veces "pasa" pero deja un cliente incompleto que
+      # recién rompe typecheck después. Por eso el reintento regenera el
+      # cliente entero en cada vuelta (no solo reintenta typecheck con un
+      # cliente ya corrupto) -- ver CLAUDE.md para el detalle de cómo se
+      # confirmó esto en la práctica (PR #17).
+      - name: prisma generate + typecheck (con reintentos)
         run: |
           for intento in 1 2 3; do
-            npm run prisma:generate 2>&1 | tee /tmp/prisma-generate.log && exit 0
-            echo "prisma:generate falló (intento $intento/3), reintentando en 15s..."
+            rm -rf node_modules/.prisma
+            if npm run prisma:generate && npm run typecheck; then
+              exit 0
+            fi
+            echo "prisma:generate/typecheck falló (intento $intento/3), reintentando en 15s..."
             sleep 15
           done
           exit 1
-      - name: DEBUG TEMPORAL -- reportar error de prisma:generate en un issue
-        if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh issue create \
-            --title "DEBUG prisma:generate falló tras reintentos (run ${{ github.run_id }})" \
-            --body-file /tmp/prisma-generate.log
-      - name: typecheck (debug temporal)
-        run: npm run typecheck 2>&1 | tee /tmp/typecheck.log
-      - name: DEBUG TEMPORAL -- reportar error de typecheck en un issue
-        if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh issue create \
-            --title "DEBUG typecheck falló (run ${{ github.run_id }})" \
-            --body-file /tmp/typecheck.log
       - run: npm run lint
       - run: npm run format:check
       - run: npm test
