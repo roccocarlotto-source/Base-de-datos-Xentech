@@ -40,11 +40,11 @@
   (2026-09-19: Meta Cloud API directo, config de KB/reglas la hace el
   propio cliente, v1 = consulta + acciones controladas). Implementación,
   paso a paso según el plan del doc (§11): paso 1 (schema — PR #17) y
-  paso 2 (backend del loop de orquestación — PR #19) completos: `LlmProvider`
-  + `OpenRouterProvider`, catálogo de 5 tools v1, gate de permisos
-  (`puedeEjecutarTool`), loop de orquestación con corte determinístico a
-  las `MAX_TOOL_ROUNDS_PER_TURN` rondas, endpoint de prueba
-  (`POST /api/agent-config/:agentType/test-message`) y CRUD de
+  paso 2 (backend del loop de orquestación — PR #19) completos:
+  `LlmProvider` y `OpenRouterProvider`, catálogo de 5 tools v1, gate de
+  permisos (`puedeEjecutarTool`), loop de orquestación con corte
+  determinístico a las `MAX_TOOL_ROUNDS_PER_TURN` rondas, endpoint de
+  prueba (`POST /api/agent-config/:agentType/test-message`) y CRUD de
   `AgentConfig`/`KnowledgeBaseEntry` (con `requireOrgAdmin`, nuevo
   middleware — configura el propio admin de la organización, no el
   admin de plataforma). Falta: paso 3 (pantalla de configuración del
