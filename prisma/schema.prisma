@@ -1,0 +1,126 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// -----------------------------------------------------------------------------
+// Fase 0 — esqueleto de datos. Mismo patrón multi-tenant que PlataformaCRM:
+// aislamiento por organizationId a nivel de aplicación (defensa principal,
+// cada query de Prisma filtra por ella) + RLS en Postgres como defensa
+// secundaria para cualquier otro camino de acceso (Supabase Realtime, un
+// cliente usado directo desde el frontend, etc.) — ver docs/estado-actual.md
+// de este repo y authentication-architecture.md del CRM para el detalle.
+// -----------------------------------------------------------------------------
+
+enum UserRole {
+  ADMIN
+  MEMBER
+}
+
+enum CuotaPeriodicidad {
+  MENSUAL
+}
+
+// Agentes de IA habilitables por tenant. Lista abierta a propósito — "etc" en
+// la definición original de Rocco — se agregan valores acá a medida que se
+// definan, sin tocar el resto del modelo.
+enum AgentType {
+  WHATSAPP
+  DATABASE_MANAGEMENT
+  REMINDERS
+}
+
+model Organization {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String    @db.VarChar(255)
+  slug      String    @unique @db.VarChar(100)
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  users        User[]
+  clientes     Cliente[]
+  agentToggles OrganizationAgentToggle[]
+
+  @@map("organizations")
+}
+
+// Usuario de UN tenant (el cliente de Xentech). id = auth.users.id de
+// Supabase (misma convención que PlataformaCRM: no hay tabla de contraseñas
+// propia, la identidad la resuelve Supabase Auth, acá solo se guarda el
+// perfil + el rol dentro de su organización).
+model User {
+  id             String    @id @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  email          String    @db.VarChar(255)
+  role           UserRole  @default(MEMBER)
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, id])
+  @@map("users")
+}
+
+// Admin de PLATAFORMA (Rocco / equipo de Xentech) — a propósito una tabla
+// aparte de User y sin organizationId: no pertenece a ningún tenant, ve y
+// administra todos. Es quien habilita/deshabilita agentes por organización
+// (OrganizationAgentToggle) — nunca el propio tenant.
+model PlatformAdmin {
+  id        String   @id @db.Uuid
+  email     String   @unique @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("platform_admins")
+}
+
+// La entidad "cliente" del brief (nombre/teléfono/email/cuota/notas).
+//
+// cuotaEstado (al_dia/atrasado) y los días de atraso NO son columnas: se
+// calculan en el service layer a partir de cuotaUltimoPago + periodicidad,
+// en el momento en que se consultan — mismo patrón de transición perezosa
+// que usa PlataformaCRM para sus estados derivados (ver InvitationStatus /
+// QuoteStatus en ese repo): sin job, sin riesgo de que quede desincronizado.
+model Cliente {
+  id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId    String             @map("organization_id") @db.Uuid
+  nombre            String             @db.VarChar(200)
+  telefono          String?            @db.VarChar(30)
+  email             String?            @db.VarChar(255)
+  notas             String?            @db.Text
+  cuotaMonto        Decimal?           @map("cuota_monto") @db.Decimal(12, 2)
+  cuotaPeriodicidad CuotaPeriodicidad? @map("cuota_periodicidad")
+  cuotaUltimoPago   DateTime?          @map("cuota_ultimo_pago") @db.Date
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  deletedAt         DateTime?          @map("deleted_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, id])
+  @@map("clientes")
+}
+
+// Habilitación de un agente de IA para una organización (tenant). Fila
+// ausente o enabled=false = deshabilitado (default explícito del brief).
+// Solo un PlatformAdmin puede escribir acá — se enforce en el service
+// layer, no en la base.
+model OrganizationAgentToggle {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  agentType      AgentType @map("agent_type")
+  enabled        Boolean   @default(false)
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, agentType])
+  @@map("organization_agent_toggles")
+}
