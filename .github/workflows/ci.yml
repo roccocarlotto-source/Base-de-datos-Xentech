@@ -5,6 +5,10 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   backend:
     runs-on: ubuntu-latest
@@ -28,13 +32,27 @@ jobs:
         run: |
           for intento in 1 2 3; do
             rm -rf node_modules/.prisma
-            if npm run prisma:generate && npm run typecheck; then
+            echo "=== intento $intento: prisma generate ===" >> /tmp/debug.log
+            npm run prisma:generate >> /tmp/debug.log 2>&1
+            gen_status=$?
+            echo "=== intento $intento: typecheck (generate exit=$gen_status) ===" >> /tmp/debug.log
+            npm run typecheck >> /tmp/debug.log 2>&1
+            tc_status=$?
+            echo "=== intento $intento: typecheck exit=$tc_status ===" >> /tmp/debug.log
+            if [ "$gen_status" -eq 0 ] && [ "$tc_status" -eq 0 ]; then
               exit 0
             fi
-            echo "prisma:generate/typecheck falló (intento $intento/3), reintentando en 15s..."
             sleep 15
           done
           exit 1
+      - name: DEBUG TEMPORAL -- reportar TODOS los intentos en un issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create \
+            --title "DEBUG los 3 intentos fallaron (run ${{ github.run_id }})" \
+            --body-file /tmp/debug.log
       - run: npm run lint
       - run: npm run format:check
       - run: npm test
