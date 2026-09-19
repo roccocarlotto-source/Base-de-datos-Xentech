@@ -1,4 +1,14 @@
-import type { AgentType, MessageDirection, MessageSenderType } from "@prisma/client";
+import type {
+  AgentConfig,
+  AgentType,
+  Cliente,
+  Conversation,
+  ConversationStatus,
+  KnowledgeBaseEntry,
+  Message,
+  MessageDirection,
+  MessageSenderType,
+} from "@prisma/client";
 import { agentConfigRepository } from "../../repositories/agentConfig.repository";
 import { conversationRepository } from "../../repositories/conversation.repository";
 import { messageRepository } from "../../repositories/message.repository";
@@ -20,25 +30,72 @@ const MENSAJES_DE_CONTEXTO = 20;
 
 // Todas las dependencias externas quedan inyectables (con los repos reales
 // como default) para poder testear el loop completo con fakes en memoria,
-// sin tocar Prisma -- ver orchestrator.test.ts.
+// sin tocar Prisma -- ver orchestrator.test.ts. Firmas explícitas con
+// Promise "plana" a propósito -- el tipo real que devuelve Prisma
+// (Prisma__XClient, con métodos extra para encadenar relaciones) no lo
+// puede implementar un fake sin depender del runtime de Prisma.
 export interface OrchestratorDeps {
-  agentConfigRepository: Pick<typeof agentConfigRepository, "findByOrgAndType">;
-  conversationRepository: Pick<
-    typeof conversationRepository,
-    "findByThread" | "create" | "setStatus" | "touchLastMessageAt"
-  >;
-  messageRepository: Pick<typeof messageRepository, "create" | "listByConversation">;
-  knowledgeBaseEntryRepository: Pick<typeof knowledgeBaseEntryRepository, "listActive">;
-  clienteRepository: Pick<typeof clienteRepository, "findByTelefono">;
+  agentConfigRepository: {
+    findByOrgAndType: (organizationId: string, agentType: AgentType) => Promise<AgentConfig | null>;
+  };
+  conversationRepository: {
+    findByThread: (
+      organizationId: string,
+      agentConfigId: string,
+      externalThreadId: string,
+    ) => Promise<Conversation | null>;
+    create: (data: {
+      organizationId: string;
+      agentConfigId: string;
+      externalThreadId: string;
+      clienteId: string | null;
+    }) => Promise<Conversation>;
+    setStatus: (id: string, status: ConversationStatus) => Promise<Conversation>;
+    touchLastMessageAt: (id: string) => Promise<Conversation>;
+  };
+  messageRepository: {
+    create: (data: {
+      organizationId: string;
+      conversationId: string;
+      direction: MessageDirection;
+      senderType: MessageSenderType;
+      content: string;
+    }) => Promise<Message>;
+    listByConversation: (conversationId: string, limit?: number) => Promise<Message[]>;
+  };
+  knowledgeBaseEntryRepository: {
+    listActive: (organizationId: string) => Promise<KnowledgeBaseEntry[]>;
+  };
+  clienteRepository: {
+    findByTelefono: (organizationId: string, telefono: string) => Promise<Cliente | null>;
+  };
   executeTool: typeof executeToolReal;
 }
 
 const defaultDeps: OrchestratorDeps = {
-  agentConfigRepository,
-  conversationRepository,
-  messageRepository,
-  knowledgeBaseEntryRepository,
-  clienteRepository,
+  agentConfigRepository: {
+    findByOrgAndType: (organizationId, agentType) =>
+      agentConfigRepository.findByOrgAndType(organizationId, agentType),
+  },
+  conversationRepository: {
+    findByThread: (organizationId, agentConfigId, externalThreadId) =>
+      conversationRepository.findByThread(organizationId, agentConfigId, externalThreadId),
+    create: (data) => conversationRepository.create(data),
+    setStatus: (id, status) => conversationRepository.setStatus(id, status),
+    touchLastMessageAt: (id) => conversationRepository.touchLastMessageAt(id),
+  },
+  messageRepository: {
+    create: (data) => messageRepository.create(data),
+    listByConversation: (conversationId, limit) =>
+      messageRepository.listByConversation(conversationId, limit),
+  },
+  knowledgeBaseEntryRepository: {
+    listActive: (organizationId) => knowledgeBaseEntryRepository.listActive(organizationId),
+  },
+  clienteRepository: {
+    findByTelefono: (organizationId, telefono) =>
+      clienteRepository.findByTelefono(organizationId, telefono),
+  },
   executeTool: executeToolReal,
 };
 
