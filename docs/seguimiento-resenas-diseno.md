@@ -206,6 +206,29 @@ Cada etapa debe quedar usable por sí sola.
 
 ---
 
+### Estado de la etapa 2 (2026-09-24)
+
+Hecha, en código:
+
+- **Modelos nuevos en `prisma/schema.prisma`:** `ConfigSeguimiento`, `Presupuesto`, `Consentimiento`, `Envio`, `MensajeSeguimiento`, `TokenResena` y `Resena`, con sus enums.
+- **Validación de la configuración con Zod:** `src/schemas/configSeguimiento.schema.ts`, con tests.
+
+Qué garantiza el diseño del schema:
+
+- **Solo agrega tablas y enums nuevos.** El diff contra `main` (`prisma migrate diff`) no tiene ningún `DROP` ni cambia tablas existentes, así que `db push` lo aplica sin `--accept-data-loss`.
+- **Aislamiento entre organizaciones en la base:** todas las relaciones hacia Cliente, User, Presupuesto y Envio usan FK compuesta `(organizationId, id)`.
+
+Diferencias con §4 (decididas, a confirmar por Rocco):
+
+- `TokenResena` guarda el **hash** del token, no el token. Consecuencia: un link no se puede reenviar desde la base, se genera uno nuevo.
+- `Resena` usa **post-moderación**: se publica aprobada y solo se rechaza por spam o contenido inapropiado. Así cumple §5 (no ocultar reseñas negativas legítimas).
+- `Mensaje` se llama `MensajeSeguimiento`, para no chocar con `Message` del agente de WhatsApp.
+
+Pendiente:
+
+- **Aplicar el schema a la base:** Rocco decidió usar el mismo proyecto de Supabase de Xentech, que tiene datos reales. Se aplica con el workflow `db-migrate.yml` después de mergear, y lo dispara Rocco. Nunca desde una sesión en la nube.
+- **Habilitación por organización:** el toggle del módulo (un valor nuevo de `AgentType` o un flag aparte) queda para la etapa 3, junto con la primera funcionalidad que lo necesite.
+
 ## 8. Reglas para las sesiones en la nube
 
 - Leer este documento y el código existente antes de proponer cambios.
