@@ -48,7 +48,9 @@ Evaluar antes de empezar:
 - **Reseñas:** son propias, no se usa Resea. Tienen que verse en la web pública de la empresa.
 - **Dominio público:** los links de reseña necesitan un dominio real. La idea es usar el de la web de la empresa.
   - Pendiente (lo averigua Rocco): qué dominio es, en qué plataforma está la web y si se pueden agregar registros DNS (por ejemplo, un subdominio `resenas.`).
-  - También pendiente: dónde está desplegado Xentech (backend y frontend). El repo no lo documenta.
+  - Relevado el 2026-09-23 en `docs/deployment.md`: Xentech no está desplegado (no hay hosting de backend ni de frontend, ni dominio propio) y usa un único proyecto de Supabase como base real y de desarrollo a la vez. Nada de eso bloquea construir y testear las etapas 2 a 4 con CI. Sí bloquea dos cosas:
+    - **Aplicar el schema nuevo a una base:** antes hay que separar Supabase en desarrollo y producción, o que Rocco acepte explícitamente aplicarlo sobre la base real.
+    - **Mandar links de reseña reales:** antes hay que desplegar. Recomendación: el mismo esquema que PlataformaCRM, backend en Render (plan pago siempre encendido, por el poller) y frontend en Vercel (dominios personalizados con SSL automático), más el subdominio de la web de la empresa.
 
 ---
 
